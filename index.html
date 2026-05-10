@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stocktake">
+<link rel="manifest" href="manifest.json">
+<title>Stocktake Scanner</title>
+<style>
+/* ===== RESET & BASE ===== */
+:root {
+  --bg:#0a0a0a; --surface:#141414; --surface2:#1c1c1c;
+  --border:#2a2a2a; --text:#fff; --dim:#9a9a9a; --muted:#555;
+  --ok:#4ade80; --err:#ef4444; --warn:#fbbf24;
+  --r:14px; --rs:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+body{display:flex;flex-direction:column;min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+
+/* ===== SCREENS ===== */
+.screen{display:none;flex:1;flex-direction:column;width:100%;max-width:480px;margin:0 auto;padding:20px;gap:16px}
+.screen.active{display:flex}
+
+/* ===== HEADER ===== */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.hdr h1{font-size:14px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.hdr .badge{font-size:11px;color:var(--dim)}
+
+/* ===== TYPE ===== */
+.xl{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-top:8px}
+.lg{font-size:20px;font-weight:600}
+.dim{color:var(--dim);font-size:14px}
+.mono{font-family:'SF Mono','Menlo',monospace}
+.center{text-align:center}
+
+/* ===== FIELD ===== */
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
+input,select{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--rs);padding:16px;font-size:16px;font-family:inherit;outline:none;transition:border-color .15s}
+input:focus,select:focus{border-color:var(--text)}
+select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path fill='white' d='M6 8L0 0h12z'/></svg>");background-repeat:no-repeat;background-position:right 16px center;padding-right:40px}
+.pin-in{letter-spacing:.5em;text-align:center;font-size:24px;font-weight:600}
+
+/* ===== BUTTONS ===== */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:18px;border:none;border-radius:var(--rs);font-size:16px;font-weight:600;font-family:inherit;cursor:pointer;transition:transform .1s,opacity .15s;letter-spacing:.02em}
+.btn:active{transform:scale(.98)}
+.btn-p{background:#fff;color:#000}
+.btn-s{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.btn-g{background:transparent;color:var(--dim);border:1px solid var(--border)}
+.btn-d{background:var(--surface);color:var(--err);border:1px solid var(--err)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sm{padding:12px;font-size:14px}
+
+/* ===== CARD ===== */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px}
+.spacer{flex:1}
+.hidden{display:none!important}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+
+/* ===== SCANNER ===== */
+.sw{position:relative;width:100%;background:#000;border-radius:var(--r);overflow:hidden;aspect-ratio:4/3;border:1px solid var(--border)}
+#video{width:100%;height:100%;object-fit:cover;display:block}
+.so{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.sf{width:70%;height:30%;border:2px solid #fff;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.4);position:relative;overflow:hidden}
+.sf::after{content:'';position:absolute;left:0;right:0;height:2px;background:#fff;animation:scan 2s ease-in-out infinite}
+@keyframes scan{0%,100%{top:0}50%{top:calc(100% - 2px)}}
+.ss{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:6px;animation:pulse 1.5s infinite}
+.dot.p{background:var(--warn);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ===== STATS ===== */
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:12px;text-align:center}
+.stat .n{font-size:22px;font-weight:700}
+.stat .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+
+/* ===== LAST SCAN ===== */
+.ls{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;transition:border-color .2s,background .2s}
+.ls.ok{border-color:var(--ok);background:rgba(74,222,128,.05)}
+.ls.err{border-color:var(--err);background:rgba(239,68,68,.05)}
+.ls .nama{font-size:16px;font-weight:600;margin-bottom:6px}
+.ls .meta{font-size:12px;color:var(--dim);display:flex;flex-wrap:wrap;gap:12px}
+.ls .meta strong{color:var(--text)}
+.pill{display:inline-block;background:#fff;color:#000;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700;margin-top:8px}
+
+/* ===== SYNC BAR ===== */
+.syncbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);font-size:12px}
+.syncbar .lft{display:flex;align-items:center;gap:8px;color:var(--dim)}
+.ind{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.ind.pend{background:var(--warn)}
+.ind.fail{background:var(--err)}
+.syncbar button{background:transparent;color:var(--text);border:1px solid var(--border);padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit}
+
+/* ===== LOG LIST ===== */
+.log-list{display:flex;flex-direction:column;gap:8px}
+.log-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.log-item .info{flex:1;min-width:0}
+.log-item .nm{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log-item .sub{font-size:11px;color:var(--dim);margin-top:2px}
+.log-item.cancelled{opacity:.4;text-decoration:line-through}
+.log-item button{background:transparent;color:var(--err);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit}
+
+/* ===== REPORT TABLE ===== */
+.rtbl{width:100%;border-collapse:collapse;font-size:12px}
+.rtbl th,.rtbl td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--border)}
+.rtbl th{background:var(--surface2);color:var(--dim);font-weight:500;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.rtbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+.tag{padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.tag-ok{background:rgba(74,222,128,.15);color:var(--ok)}
+.tag-ps{background:rgba(239,68,68,.15);color:var(--err)}
+
+/* ===== TOAST ===== */
+#toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-200%);background:var(--surface);color:var(--text);padding:12px 18px;border-radius:var(--rs);border:1px solid var(--border);font-size:14px;z-index:100;transition:transform .3s;max-width:90%;text-align:center}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.ok{border-color:var(--ok)}
+#toast.err{border-color:var(--err)}
+
+/* ===== SPINNER ===== */
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:rot .8s linear infinite;display:inline-block}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<!-- ========== LOGIN ========== -->
+<section id="screen-login" class="screen">
+  <div style="margin-top:40px"></div>
+  <div>
+    <div class="xl">Stocktake</div>
+    <div class="xl" style="color:var(--dim);margin-top:-4px">Scanner</div>
+    <div class="dim" style="margin-top:8px">Sistem kira stok kedai</div>
+  </div>
+  <div style="margin-top:24px"></div>
+  <div class="field">
+    <label>Masukkan PIN</label>
+    <input id="pin-input" class="pin-in" type="tel" inputmode="numeric" maxlength="8" placeholder="• • • •" autocomplete="off">
+  </div>
+  <button id="btn-login" class="btn btn-p">Masuk</button>
+  <div class="spacer"></div>
+  <div class="center" style="font-size:11px;color:var(--muted);letter-spacing:.05em">SISTEM SCAN STOK • v3</div>
+</section>
+
+<!-- ========== SELECT KEDAI ========== -->
+<section id="screen-select" class="screen">
+  <div style="margin-top:20px"></div>
+  <div>
+    <div class="dim" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Pilih Kedai</div>
+    <div class="xl" style="margin-top:6px">Mula Sesi Scan</div>
+  </div>
+  <div class="field">
+    <label>Kedai</label>
+    <select id="sel-kedai"><option value="">-- Pilih Kedai --</option></select>
+  </div>
+  <div class="card">
+    <div class="dim" style="font-size:12px;letter-spacing:.05em;text-transform:uppercase">Periode Aktif</div>
+    <div class="lg mono" id="periode-display" style="margin-top:4px">—</div>
+    <div class="dim" id="product-count" style="margin-top:8px;font-size:12px">— produk dimuat</div>
+  </div>
+  <button id="btn-start-scan" class="btn btn-p">Start Scan</button>
+  <div class="spacer"></div>
+</section>
+
+<!-- ========== SCANNER ========== -->
+<section id="screen-scan" class="screen">
+  <header class="hdr" style="margin:-20px -20px 0;padding:14px 20px">
+    <div>
+      <div style="font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase">Kedai</div>
+      <div id="hdr-kedai" style="font-size:14px;font-weight:600;margin-top:2px">—</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase">Staff</div>
+      <div id="hdr-staff" style="font-size:14px;font-weight:600;margin-top:2px">—</div>
+    </div>
+  </header>
+
+  <div class="sw">
+    <video id="video" playsinline muted></video>
+    <div class="so"><div class="sf"></div></div>
+    <div class="ss">
+      <span><span id="scan-dot" class="dot"></span><span id="scan-txt">SCANNING</span></span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="stat-total">0</div><div class="l">Total Scan</div></div>
+    <div class="stat"><div class="n" id="stat-unique">0</div><div class="l">Unik</div></div>
+    <div class="stat"><div class="n" id="stat-pending">0</div><div class="l">Pending</div></div>
+  </div>
+
+  <div id="last-scan" class="ls hidden">
+    <div class="nama" id="ls-nama">—</div>
+    <div class="meta">
+      <span><strong id="ls-sku">—</strong></span>
+      <span id="ls-bc" class="mono">—</span>
+      <span id="ls-kat">—</span>
+      <span id="ls-harga">—</span>
+    </div>
+    <div class="pill" id="ls-qty">Qty: 0</div>
+  </div>
+
+  <div class="syncbar">
+    <div class="lft"><span id="sync-ind" class="ind"></span><span id="sync-txt2">Semua tersimpan</span></div>
+    <button id="btn-sync">Sync Now</button>
+  </div>
+
+  <div class="btn-row">
+    <button id="btn-pause" class="btn btn-s sm">Pause</button>
+    <button id="btn-undo"  class="btn btn-s sm">Undo</button>
+  </div>
+  <div class="btn-row">
+    <button id="btn-log"    class="btn btn-g sm">Lihat Log</button>
+    <button id="btn-finish" class="btn btn-d sm">Finish</button>
+  </div>
+</section>
+
+<!-- ========== LOG ========== -->
+<section id="screen-log" class="screen">
+  <header class="hdr" style="margin:-20px -20px 0;padding:14px 20px">
+    <button id="btn-back-scan" class="btn btn-g sm" style="width:auto;padding:8px 14px">← Kembali</button>
+    <h1>Log Scan</h1>
+    <div class="badge" id="log-count">—</div>
+  </header>
+  <input id="log-search" type="text" placeholder="Cari barcode / SKU / nama...">
+  <div id="log-list" class="log-list"></div>
+</section>
+
+<!-- ========== REPORT ========== -->
+<section id="screen-report" class="screen">
+  <header class="hdr" style="margin:-20px -20px 0;padding:14px 20px">
+    <button id="btn-back-report" class="btn btn-g sm" style="width:auto;padding:8px 14px">← Scan</button>
+    <h1>Laporan</h1>
+    <div class="badge" id="report-status">—</div>
+  </header>
+  <select id="report-filter">
+    <option value="all">Semua Status</option>
+    <option value="perlu">Perlu Semak</option>
+    <option value="ok">OK</option>
+  </select>
+  <div style="overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)">
+    <table class="rtbl">
+      <thead>
+        <tr>
+          <th>Produk</th>
+          <th class="num">StoreHub</th>
+          <th class="num">Scan</th>
+          <th class="num">Selisih</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="report-tbody"></tbody>
+    </table>
+  </div>
+  <button id="btn-new-session" class="btn btn-s">Mula Sesi Baru</button>
+</section>
+
+<!-- ZXing fallback -->
+<script src="https://unpkg.com/@zxing/library@0.21.0/umd/index.min.js"></script>
+
+<script>
+/* =================================================================
+   STOCKTAKE SCANNER — FRONTEND v3
+   Semua API call ke /api (Netlify Function proxy)
+   Tiada call terus ke Apps Script — CORS diselesaikan sepenuhnya
+================================================================= */
+
+// ─── STATE ────────────────────────────────────────────────────────
+const S = {
+  staff: null, kedai: null, sessionId: null, periode: null,
+  master: {}, kedaiList: [], productCount: 0,
+  queue: [], recent: [], bcQty: {}, total: 0,
+  scanning: false, lastBc: null, lastTs: 0,
+  syncing: false, syncSt: 'idle',
+  scanner: null, cooldown: 1200, flushTimer: null
+};
+const LS = { Q: 'stk_q_v3', R: 'stk_r_v3' };
+
+// ─── UTIL ─────────────────────────────────────────────────────────
+const $  = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function showScreen(id) {
+  $$('.screen').forEach(s => s.classList.remove('active'));
+  $(`#screen-${id}`).classList.add('active');
+}
+
+function toast(msg, type) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.className = '', 2600);
+}
+
+function uuid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function nowStr() {
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
+}
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function beep(type) {
+  try {
+    const ctx = beep._c || (beep._c = new (window.AudioContext || window.webkitAudioContext)());
+    if (ctx.state === 'suspended') ctx.resume();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'sine';
+    if (type === 'err') {
+      o.frequency.value = 220;
+      g.gain.setValueAtTime(.15, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .3);
+      o.start(); o.stop(ctx.currentTime + .3);
+    } else {
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(.15, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .1);
+      o.start(); o.stop(ctx.currentTime + .1);
+    }
+  } catch (_) {}
+}
+function vib(p) { navigator.vibrate?.(p); }
+
+// ─── STORAGE ──────────────────────────────────────────────────────
+function saveQ()  { try { localStorage.setItem(LS.Q, JSON.stringify(S.queue)); } catch (_) {} }
+function loadQ()  { try { S.queue  = JSON.parse(localStorage.getItem(LS.Q) || '[]'); } catch (_) { S.queue  = []; } }
+function saveR()  { try { localStorage.setItem(LS.R, JSON.stringify(S.recent.slice(0, 100))); } catch (_) {} }
+function loadR()  { try { S.recent = JSON.parse(localStorage.getItem(LS.R) || '[]'); } catch (_) { S.recent = []; } }
+
+// ─── API ──────────────────────────────────────────────────────────
+// Semua request ke /.netlify/functions/api (proxy)
+// Frontend tidak tahu langsung pasal Apps Script URL
+
+async function api(action, data) {
+  const isGet = !data;
+  const url   = isGet ? `/api?action=${encodeURIComponent(action)}` : '/api';
+  const opts  = isGet
+    ? { method: 'GET' }
+    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...data }) };
+
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  return json;
+}
+
+// ─── LOGIN ────────────────────────────────────────────────────────
+async function doLogin() {
+  const pin = $('#pin-input').value.trim();
+  if (!pin) { toast('Masukkan PIN', 'err'); return; }
+
+  const btn = $('#btn-login');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+
+  try {
+    const res = await api('login', { pin });
+    if (!res.ok) { toast(res.msg || 'PIN salah', 'err'); return; }
+
+    S.staff = res.staff.nama;
+    await loadInitial();
+    if (res.staff.kedaiDefault) $('#sel-kedai').value = res.staff.kedaiDefault;
+    showScreen('select');
+  } catch (e) {
+    toast('Tidak boleh sambung: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Masuk';
+  }
+}
+
+async function loadInitial() {
+  const res = await api('initial');
+  if (!res.ok) throw new Error(res.msg);
+
+  S.master       = res.master       || {};
+  S.kedaiList    = res.kedaiList    || [];
+  S.periode      = res.periode;
+  S.productCount = res.productCount || 0;
+
+  const sel = $('#sel-kedai');
+  sel.innerHTML = '<option value="">-- Pilih Kedai --</option>' +
+    S.kedaiList.map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join('');
+
+  $('#periode-display').textContent = S.periode;
+  $('#product-count').textContent   = `${S.productCount.toLocaleString()} produk dimuat`;
+}
+
+// ─── SESSION ──────────────────────────────────────────────────────
+async function startSession() {
+  const kedai = $('#sel-kedai').value;
+  if (!kedai) { toast('Sila pilih kedai', 'err'); return; }
+
+  const btn = $('#btn-start-scan');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+
+  try {
+    const res = await api('ensureSession', { kedai, periode: S.periode });
+    if (!res.ok) { toast(res.msg, 'err'); return; }
+
+    S.kedai     = kedai;
+    S.sessionId = res.sessionId;
+
+    $('#hdr-kedai').textContent = kedai;
+    $('#hdr-staff').textContent = S.staff;
+
+    showScreen('scan');
+    startScanner();
+    startFlushLoop();
+  } catch (e) {
+    toast('Ralat: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Start Scan';
+  }
+}
+
+// ─── SCANNER ──────────────────────────────────────────────────────
+async function startScanner() {
+  const video   = $('#video');
+  const statusEl = $('#scan-txt');
+  const dotEl   = $('#scan-dot');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    S.scanning = true;
+    statusEl.textContent = 'SCANNING';
+    dotEl.classList.remove('p');
+
+    // Cuba BarcodeDetector (native, pantas)
+    if ('BarcodeDetector' in window) {
+      try {
+        const det = new BarcodeDetector({
+          formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','itf','codabar']
+        });
+        S.scanner = { type: 'native', det, stream };
+        nativeLoop();
+        return;
+      } catch (_) {}
+    }
+
+    // Fallback ZXing
+    if (typeof ZXing === 'undefined') { toast('Library scanner tidak dimuat', 'err'); return; }
+    const reader = new ZXing.BrowserMultiFormatReader();
+    S.scanner = { type: 'zxing', reader, stream };
+    reader.decodeFromStream(stream, video, result => {
+      if (result && S.scanning) onBarcode(result.getText());
+    });
+
+  } catch (e) {
+    statusEl.textContent = 'KAMERA GAGAL';
+    showCamErr(e);
+  }
+}
+
+async function nativeLoop() {
+  if (!S.scanner || S.scanner.type !== 'native') return;
+  if (!S.scanning) { setTimeout(nativeLoop, 200); return; }
+  try {
+    const codes = await S.scanner.det.detect($('#video'));
+    if (codes?.length) onBarcode(codes[0].rawValue);
+  } catch (_) {}
+  requestAnimationFrame(nativeLoop);
+}
+
+function stopScanner() {
+  S.scanning = false;
+  if (!S.scanner) return;
+  if (S.scanner.type === 'zxing') { try { S.scanner.reader.reset(); } catch (_) {} }
+  S.scanner.stream?.getTracks().forEach(t => t.stop());
+  S.scanner = null;
+}
+
+function togglePause() {
+  S.scanning = !S.scanning;
+  $('#scan-txt').textContent = S.scanning ? 'SCANNING' : 'PAUSED';
+  $('#scan-dot').classList.toggle('p', !S.scanning);
+  $('#btn-pause').textContent = S.scanning ? 'Pause' : 'Resume';
+}
+
+function showCamErr(e) {
+  let msg = 'Tidak boleh akses kamera', help = '';
+  if (e.name === 'NotAllowedError')  { msg = 'Permission kamera ditolak';  help = 'Klik 🔒 di address bar → Camera → Allow → reload page.'; }
+  if (e.name === 'NotFoundError')    { msg = 'Tiada kamera dijumpai'; }
+  if (e.name === 'NotReadableError') { msg = 'Kamera digunakan app lain';  help = 'Tutup app lain yang guna kamera.'; }
+
+  const wrap = document.querySelector('.sw');
+  wrap.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center;color:#fff">
+      <div style="font-size:44px;margin-bottom:12px">📷</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">${esc(msg)}</div>
+      <div style="font-size:12px;color:#9a9a9a;margin-bottom:20px;line-height:1.5">${esc(help)}</div>
+      <button onclick="retryCam()" style="background:#fff;color:#000;border:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;width:100%">Cuba Lagi</button>
+      <button onclick="manualMode()" style="background:transparent;color:#fff;border:1px solid #333;padding:12px;border-radius:8px;font-size:13px;margin-top:10px;cursor:pointer;width:100%">Input Barcode Manual</button>
+    </div>`;
+}
+
+function retryCam() {
+  document.querySelector('.sw').innerHTML = `
+    <video id="video" playsinline muted></video>
+    <div class="so"><div class="sf"></div></div>
+    <div class="ss"><span><span id="scan-dot" class="dot"></span><span id="scan-txt">SCANNING</span></span></div>`;
+  startScanner();
+}
+
+function manualMode() {
+  document.querySelector('.sw').innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;color:#fff">
+      <div style="font-size:13px;color:#9a9a9a;margin-bottom:12px">Input Barcode Manual</div>
+      <input id="manual-bc" type="text" inputmode="numeric" placeholder="Masukkan barcode..."
+        style="background:#1c1c1c;color:#fff;border:1px solid #2a2a2a;border-radius:8px;padding:14px;font-size:16px;width:100%;text-align:center;font-family:monospace">
+      <button onclick="submitManual()" style="background:#fff;color:#000;border:none;padding:12px;border-radius:8px;font-weight:600;margin-top:12px;width:100%;cursor:pointer">Submit</button>
+      <button onclick="retryCam()" style="background:transparent;color:#fff;border:1px solid #333;padding:10px;border-radius:8px;font-size:12px;margin-top:8px;width:100%;cursor:pointer">Cuba Semula Kamera</button>
+    </div>`;
+  const inp = document.getElementById('manual-bc');
+  inp?.addEventListener('keydown', e => { if (e.key === 'Enter') submitManual(); });
+  setTimeout(() => inp?.focus(), 100);
+}
+
+function submitManual() {
+  const inp = document.getElementById('manual-bc');
+  if (!inp) return;
+  const bc = inp.value.trim();
+  if (!bc) return;
+  S.scanning = true;
+  onBarcode(bc);
+  inp.value = '';
+  inp.focus();
+}
+
+// ─── SCAN LOGIC ───────────────────────────────────────────────────
+function onBarcode(bc) {
+  if (!S.scanning) return;
+  bc = String(bc).trim();
+  if (!bc) return;
+
+  const now = Date.now();
+  if (S.lastBc === bc && (now - S.lastTs) < S.cooldown) return;
+  S.lastBc = bc; S.lastTs = now;
+
+  const prod = S.master[bc];
+  if (!prod) { invalidScan(bc); return; }
+  validScan(prod);
+}
+
+function validScan(prod) {
+  const scan = {
+    scanId: uuid(), waktu: nowStr(),
+    barcode: prod.barcode, sku: prod.sku, nama: prod.nama,
+    kategori: prod.kategori, harga: prod.harga, qty: 1
+  };
+
+  S.total++;
+  S.bcQty[prod.barcode] = (S.bcQty[prod.barcode] || 0) + 1;
+  S.recent.unshift({ ...scan, cancelled: false });
+  S.recent = S.recent.slice(0, 100);
+  S.queue.push(scan);
+
+  saveQ(); saveR();
+  beep('ok'); vib(60);
+  showValidCard(prod, S.bcQty[prod.barcode]);
+  updateStats(); updateSyncBar();
+
+  if (S.queue.length >= 10) flush();
+}
+
+function invalidScan(bc) {
+  beep('err'); vib([100,50,100]);
+  const card = $('#last-scan');
+  card.classList.remove('ok', 'hidden');
+  card.classList.add('err');
+  $('#ls-nama').textContent  = 'Barcode Tidak Dijumpai';
+  $('#ls-sku').textContent   = '—';
+  $('#ls-bc').textContent    = bc;
+  $('#ls-kat').textContent   = 'PERLU SEMAK';
+  $('#ls-harga').textContent = '—';
+  $('#ls-qty').textContent   = '⚠ Bukan dalam Master';
+  toast('Barcode tidak dijumpai — Perlu Semak', 'err');
+}
+
+function showValidCard(prod, qty) {
+  const card = $('#last-scan');
+  card.classList.remove('err', 'hidden');
+  card.classList.add('ok');
+  $('#ls-nama').textContent  = prod.nama;
+  $('#ls-sku').textContent   = prod.sku;
+  $('#ls-bc').textContent    = prod.barcode;
+  $('#ls-kat').textContent   = prod.kategori || '—';
+  $('#ls-harga').textContent = 'RM ' + (prod.harga || 0);
+  $('#ls-qty').textContent   = `Qty: ${qty}`;
+}
+
+function updateStats() {
+  $('#stat-total').textContent   = S.total;
+  $('#stat-unique').textContent  = Object.keys(S.bcQty).length;
+  $('#stat-pending').textContent = S.queue.length;
+}
+
+// ─── SYNC ─────────────────────────────────────────────────────────
+function startFlushLoop() {
+  if (S.flushTimer) return;
+  S.flushTimer = setInterval(() => { if (S.queue.length && !S.syncing) flush(); }, 4000);
+}
+function stopFlushLoop() { clearInterval(S.flushTimer); S.flushTimer = null; }
+
+async function flush() {
+  if (S.syncing || !S.queue.length) return;
+  const batch = S.queue.slice(0, 50);
+  S.syncing = true; S.syncSt = 'sync'; updateSyncBar();
+
+  try {
+    const res = await api('recordScan', {
+      payload: { sessionId: S.sessionId, kedai: S.kedai, scans: batch }
+    });
+    if (res?.ok) {
+      S.queue.splice(0, batch.length); saveQ();
+      S.syncSt = S.queue.length ? 'pend' : 'idle';
+    } else {
+      S.syncSt = 'fail';
+      toast('Sync gagal: ' + (res?.msg || ''), 'err');
+    }
+  } catch (_) {
+    S.syncSt = 'fail';
+    toast('Offline — scan disimpan local', 'err');
+  } finally {
+    S.syncing = false; updateSyncBar();
+  }
+}
+
+function updateSyncBar() {
+  const ind = $('#sync-ind'), txt = $('#sync-txt2');
+  if (!ind) return;
+  ind.className = 'ind';
+  switch (S.syncSt) {
+    case 'sync': txt.textContent = `Sync... (${S.queue.length})`; ind.classList.add('pend'); break;
+    case 'fail': txt.textContent = `Ralat — ${S.queue.length} pending`; ind.classList.add('fail'); break;
+    case 'pend': txt.textContent = `${S.queue.length} pending upload`; ind.classList.add('pend'); break;
+    default:     txt.textContent = 'Semua tersimpan';
+  }
+  $('#stat-pending').textContent = S.queue.length;
+}
+
+// ─── UNDO / CANCEL ────────────────────────────────────────────────
+async function undoLast() {
+  const i = S.recent.findIndex(s => !s.cancelled);
+  if (i < 0) { toast('Tiada scan untuk undo'); return; }
+  const sc = S.recent[i];
+
+  const qi = S.queue.findIndex(s => s.scanId === sc.scanId);
+  if (qi >= 0) {
+    S.queue.splice(qi, 1); S.recent.splice(i, 1);
+    saveQ(); saveR();
+  } else {
+    try {
+      const res = await api('cancelScan', { scanId: sc.scanId });
+      if (!res.ok) { toast(res.msg, 'err'); return; }
+      S.recent[i].cancelled = true; saveR();
+    } catch (_) { toast('Tidak boleh undo (offline)', 'err'); return; }
+  }
+
+  S.total = Math.max(0, S.total - 1);
+  S.bcQty[sc.barcode] = Math.max(0, (S.bcQty[sc.barcode] || 0) - 1);
+  if (!S.bcQty[sc.barcode]) delete S.bcQty[sc.barcode];
+  updateStats(); updateSyncBar();
+  toast('Scan dibatalkan', 'ok');
+}
+
+async function cancelById(scanId) {
+  const i = S.recent.findIndex(s => s.scanId === scanId);
+  if (i < 0 || S.recent[i].cancelled) return;
+  const sc = S.recent[i];
+
+  const qi = S.queue.findIndex(s => s.scanId === scanId);
+  if (qi >= 0) { S.queue.splice(qi, 1); saveQ(); }
+  else {
+    try {
+      const res = await api('cancelScan', { scanId });
+      if (!res.ok) { toast(res.msg, 'err'); return; }
+    } catch (_) { toast('Tidak boleh cancel (offline)', 'err'); return; }
+  }
+
+  S.recent[i].cancelled = true; saveR();
+  S.total = Math.max(0, S.total - 1);
+  S.bcQty[sc.barcode] = Math.max(0, (S.bcQty[sc.barcode] || 0) - 1);
+  if (!S.bcQty[sc.barcode]) delete S.bcQty[sc.barcode];
+  renderLog(); updateStats(); updateSyncBar();
+  toast('Scan dibatalkan');
+}
+
+// ─── LOG ──────────────────────────────────────────────────────────
+function renderLog() {
+  const q     = $('#log-search').value.trim().toLowerCase();
+  const items = S.recent.filter(s =>
+    !q || [s.barcode, s.sku, s.nama].some(v => (v || '').toLowerCase().includes(q))
+  );
+  $('#log-count').textContent = `${items.length} scan`;
+  const list = $('#log-list');
+  if (!items.length) { list.innerHTML = '<div class="dim center" style="padding:40px 0">Tiada scan lagi</div>'; return; }
+  list.innerHTML = items.map(s => `
+    <div class="log-item ${s.cancelled ? 'cancelled' : ''}">
+      <div class="info">
+        <div class="nm">${esc(s.nama)}</div>
+        <div class="sub">${esc(s.sku)} • ${esc(s.barcode)} • ${(s.waktu || '').split(' ')[1] || ''}</div>
+      </div>
+      ${!s.cancelled
+        ? `<button onclick="cancelById('${s.scanId}')">Batal</button>`
+        : '<span class="dim" style="font-size:11px">Batal</span>'}
+    </div>`).join('');
+}
+
+// ─── FINISH / REPORT ──────────────────────────────────────────────
+async function finish() {
+  if (!confirm('Selesaikan sesi scan?')) return;
+  if (S.queue.length) {
+    toast('Sync semua scan dulu...');
+    await flush();
+    if (S.queue.length && !confirm(`${S.queue.length} scan belum sync. Teruskan?`)) return;
+  }
+  stopScanner(); stopFlushLoop();
+  await loadReport();
+  showScreen('report');
+}
+
+async function loadReport() {
+  $('#report-status').textContent = 'Memuat...';
+  try {
+    await api('rebuildCek');
+    const res = await api('getReport', { kedai: S.kedai, periode: S.periode });
+    if (!res.ok) { $('#report-status').textContent = 'Ralat'; return; }
+    S._rows = res.rows;
+    renderReport();
+  } catch (_) { $('#report-status').textContent = 'Tidak boleh muat'; }
+}
+
+function renderReport() {
+  const rows = S._rows || [];
+  const f    = $('#report-filter').value;
+  const show = rows.filter(r => f === 'ok' ? r['Status']==='OK' : f === 'perlu' ? r['Status']==='Perlu Semak' : true);
+  $('#report-status').textContent = `${show.length} item`;
+  const tb = $('#report-tbody');
+  if (!show.length) { tb.innerHTML = '<tr><td colspan="5" class="center dim" style="padding:30px">Tiada data</td></tr>'; return; }
+  tb.innerHTML = show.map(r => {
+    const sel = Number(r['Selisih']) || 0;
+    return `<tr>
+      <td>
+        <div style="font-weight:500">${esc(r['Nama Produk'])}</div>
+        <div class="dim" style="font-size:10px">${esc(r['SKU'] || '')}</div>
+      </td>
+      <td class="num">${r['Qty StoreHub']}</td>
+      <td class="num">${r['Qty Scan']}</td>
+      <td class="num" style="color:${sel===0?'var(--dim)':sel>0?'var(--ok)':'var(--err)'}">${sel>0?'+':''}${sel}</td>
+      <td><span class="tag ${r['Status']==='OK'?'tag-ok':'tag-ps'}">${esc(r['Status'])}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  loadQ(); loadR();
+  if (S.queue.length) setTimeout(() => toast(`${S.queue.length} scan pending sync`, 'ok'), 600);
+
+  // Login
+  $('#btn-login').addEventListener('click', doLogin);
+  $('#pin-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  // Select
+  $('#btn-start-scan').addEventListener('click', startSession);
+
+  // Scanner
+  $('#btn-pause').addEventListener('click', togglePause);
+  $('#btn-undo').addEventListener('click', undoLast);
+  $('#btn-log').addEventListener('click', () => { renderLog(); showScreen('log'); });
+  $('#btn-finish').addEventListener('click', finish);
+  $('#btn-sync').addEventListener('click', flush);
+
+  // Log
+  $('#btn-back-scan').addEventListener('click', () => showScreen('scan'));
+  $('#log-search').addEventListener('input', renderLog);
+
+  // Report
+  $('#btn-back-report').addEventListener('click', () => {
+    showScreen('scan');
+    if (!S.scanning) startScanner();
+    startFlushLoop();
+  });
+  $('#report-filter').addEventListener('change', renderReport);
+  $('#btn-new-session').addEventListener('click', () => {
+    if (!confirm('Mula sesi baru? Data tempatan dipadam.')) return;
+    [LS.Q, LS.R].forEach(k => localStorage.removeItem(k));
+    location.reload();
+  });
+
+  window.addEventListener('online',  () => { toast('Online — sync...', 'ok'); flush(); });
+  window.addEventListener('offline', () => toast('Offline — scan disimpan local', 'err'));
+
+  showScreen('login');
+  setTimeout(() => $('#pin-input')?.focus(), 100);
+});
+
+window.addEventListener('beforeunload', e => {
+  if (S.queue.length) { e.preventDefault(); e.returnValue = `${S.queue.length} scan belum sync.`; }
+});
+
+// Expose untuk onclick
+window.cancelById    = cancelById;
+window.retryCam      = retryCam;
+window.manualMode    = manualMode;
+window.submitManual  = submitManual;
+</script>
+</body>
+</html>
